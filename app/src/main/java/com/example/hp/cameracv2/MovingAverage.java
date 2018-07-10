@@ -1,16 +1,16 @@
 package com.example.hp.cameracv2;
 public class MovingAverage {
-    private int [] window;
+    private double [] window;
     private int n, insert;
     private long sum;
 
     public MovingAverage(int size) {
-        window = new int[size];
+        window = new double[size];
         insert = 0;
         sum = 0;
     }
 
-    public double next(int val) {
+    public double next(double val) {
         if (n < window.length)  n++;
         sum -= window[insert];
         sum += val;

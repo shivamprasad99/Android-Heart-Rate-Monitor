@@ -41,8 +41,9 @@ import java.util.Collections;
 public class GetHeartRate {
     private double[]Frequency;
     private MovingAverage m1,m2,m3;
+
     public double xyz(Mat[] FrameArray,double framerate){
-        int movingAveWindow = (int)framerate/5;
+
         Log.i("Framerate","average fps is "+framerate);
         double[][] bpmEst=new double[50][2];
         int numofPatchPairs = 50;
@@ -65,11 +66,13 @@ public class GetHeartRate {
                 mixedSignal[0][j]=getAverageGreen(patch1);
                 mixedSignal[1][j]=getAverageGreen(patch2);
             }
-            m1 = new MovingAverage(movingAveWindow);m2 = new MovingAverage(movingAveWindow);
+
+            m1 = new MovingAverage ((int)framerate/5);m2 = new MovingAverage((int)framerate/5);
             for(int m=0;m<mixedSignal[0].length;m++){
                 mixedSignal[0][m]=m1.next((int)mixedSignal[0][m]);
                 mixedSignal[1][m]=m2.next((int)mixedSignal[1][m]);
             }
+
             FastICA fi = null;
             try {
                 fi = new FastICA(mixedSignal,2);
@@ -78,37 +81,42 @@ public class GetHeartRate {
             }
             double[][] vectors = fi.getICVectors();
             RealMatrix icasig = new Array2DRowRealMatrix(vectors,false);
-            Log.i("INSIDE GETHEARTRATE","patch pair created and signal is stored" + i);;
+            Log.i("INSIDE GETHEARTRATE","patch pair created and signal is stored" + i);
+
 
 
             double[] d = new double[2];
             double[][] pxxEst=new double[2][];
 
             for(int j=0;j<2;j++){
+
+
                 d[j]=minDsum(mixedSignal,icasig.getRow(j));
                 double lambda = 100/(Math.pow(60/framerate,2));
                 icasig.setRowMatrix(j,(detrendingFilter(icasig.getRowMatrix(j).transpose(),lambda)).transpose());
-//                icasig.setRowMatrix(j,icasig.getRowMatrix(j).scalarMultiply(0.1));
-                if(i<3)
-                {
-                    for(int m=0;m<199;m++){
-                        Log.i("Heart Rate icasig","icasig "+m+" "+icasig.getRowMatrix(j).getEntry(0,m));
-                    }
-                }
-                m3 = new MovingAverage(movingAveWindow);
+//                for(int m=0;m<199;m++){
+//                    Log.i("Heart Rate icasig","icasig "+m+" "+icasig.getRowMatrix(j).getEntry(0,m));
+//                }
+
+                m3 = new MovingAverage((int)framerate/5);
                 for (int m=0;m<icasig.getColumnDimension();m++){
                     icasig.setEntry(j,m,m3.next((int)icasig.getEntry(j,m)));
                 }
+
+//                icasig.setRowMatrix(j,icasig.getRowMatrix(j).scalarMultiply(0.1));
+
 
                 pxxEst[j]= pwelch(icasig.getRowMatrix(j),framerate);
 //                Log.i("Heart Rate Power","Power length: "+pxxEst[j].length);
 
 
-                pxxEst[j]=Arrays.copyOfRange(pxxEst[j],11, 255);
+                pxxEst[j]=Arrays.copyOfRange(pxxEst[j],11, pxxEst[j].length);
+                Frequency=Arrays.copyOfRange(Frequency,11,Frequency.length);
 
                 Log.i("Heart Rate 2","frequency at zero : "+Frequency[0]+"\n");
                 //index of max entry
                 double max=pxxEst[j][1];
+
                 int maxindex=0;
                 for(int m=0;m<pxxEst[j].length;m++){
                     if(pxxEst[j][m]>max) {
@@ -119,21 +127,26 @@ public class GetHeartRate {
 
                 //Find the peak frequencies in Distribution
                 double[] pks=findpeaks(pxxEst[j]);
+                if(pks.length==0)
+                    continue;
                 double max_pk=pks[0];
                 double max_pk2=pks[0];
-                for(int m=0;m<pks.length;m++){
-                    if(pks[m]>max_pk){
-                        max_pk=pks[m];
+                if(pks.length>1){
+                    max_pk2=pks[1];
+                    for(int m=0;m<pks.length;m++){
+                        if(pks[m]>max_pk){
+                            max_pk=pks[m];
+                        }
                     }
-                }
-                for(int m=0;m<pks.length;m++){
-                    if(pks[m]>max_pk2&&pks[m]!=max_pk){
-                        max_pk2=pks[m];
+                    for(int m=0;m<pks.length;m++){
+                        if(pks[m]>max_pk2&&pks[m]<max_pk){
+                            max_pk2=pks[m];
+                        }
                     }
                 }
                 Log.i("heart rate","max_index="+maxindex+" max_1="+max_pk+" max_2="+max_pk2);
                 if(Math.abs(max_pk/max_pk2)>1){
-                    bpmEst[i][j]=60*Frequency[maxindex];
+                    bpmEst[i][j]=Math.round(60*Frequency[maxindex]);
                     Log.i("Heart Rate","BPM"+bpmEst[i][j]);
                 }
                 else
@@ -167,8 +180,16 @@ public class GetHeartRate {
             if(bpmEst[k][1]!=-1 &&bpmEst[k][1]!=0 )
                 hr[count++]=bpmEst[k][1];
         }
-
         return StatUtils.mean(StatUtils.mode(hr));
+    }
+
+    private RealMatrix movingavefliter(RealMatrix rowMatrix,double framerate) {
+        MovingAverage movingAve;
+        movingAve=new MovingAverage((int)framerate/5);
+        for(int m=0;m<200;m++){
+            rowMatrix.setEntry(0,m,movingAve.next((int)rowMatrix.getEntry(0,m)));
+        }
+        return rowMatrix;
     }
 
 
@@ -182,6 +203,8 @@ public class GetHeartRate {
         return average/(patch.width()*patch.height());
     }
 
+
+
     public RealMatrix detrendingFilter(RealMatrix z,double lambda){
         int T = z.getRowDimension();
         RealMatrix I = MatrixUtils.createRealIdentityMatrix(T);
@@ -194,6 +217,10 @@ public class GetHeartRate {
         double[] a = new double[]{1,-2,1};
         O = O.multiply((new Array2DRowRealMatrix(a)).transpose());
         RealMatrix D2 = spdiags(O,T);
+
+        double[][] d2a=D2.getData();
+//        Log.i("filter",Arrays.deepToString(d2a).replace("], ", "]\n"));
+        Log.i("filter","rows :"+d2a.length+" cols"+d2a[0].length);
         RealMatrix z_stat = new Array2DRowRealMatrix();
         z_stat = (I.subtract(MatrixUtils.inverse(I.add((((D2.transpose()).multiply(D2)).scalarMultiply(Math.pow(lambda,2))))))).multiply(z);
         return z_stat;
@@ -207,7 +234,7 @@ public class GetHeartRate {
                 D2.setEntry(i,j,0);
             }
         }
-        for(int i=0;i<2;i++){       //column number of O
+        for(int i=0;i<3;i++){       //column number of O
             for(int j=0;j<T-2;j++){
                 D2.setEntry(j,i+j,O.getEntry(j,i));
             }

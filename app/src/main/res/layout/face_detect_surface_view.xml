@@ -15,11 +15,18 @@
         android:layout_alignParentBottom="true"
         android:layout_centerHorizontal="true"
         android:layout_marginBottom="21dp"
-        android:text="switch camera" />
+        android:text="@string/switch_camera" />
+
+    <Button
+        android:id="@+id/reset_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_alignTop="@+id/switch_camera"
+        android:layout_marginStart="17dp"
+        android:text="@string/reset" />
 
     <TextView
-        android:background="#fff"
-        android:textColor="#000"
         android:id="@+id/textView2"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -27,6 +34,8 @@
         android:layout_alignParentEnd="true"
         android:layout_marginBottom="36dp"
         android:layout_marginEnd="33dp"
-        android:text="TextView" />
+        android:background="#fff"
+        android:text="@string/textview"
+        android:textColor="#000" />
 
 </RelativeLayout>

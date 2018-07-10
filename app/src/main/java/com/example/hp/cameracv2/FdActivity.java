@@ -56,7 +56,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
     private CascadeClassifier      mJavaDetector;
     private DetectionBasedTracker  mNativeDetector;
     private GetHeartRate           mGetHeartRate;
-    private Display                mDisplay;
+    //private Display                mDisplay;
 
     private int                    mDetectorType       = NATIVE_DETECTOR;
     private String[]               mDetectorName;
@@ -283,12 +283,12 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         if(k==200) {
 
             k++;
-            final double ave = mGetHeartRate.xyz(FrameArray,fpsum/10);
+            final double ave = mGetHeartRate.xyz(FrameArray,Math.round(fpsum/10));
             Log.i("HEART RATE","HR = "+ave);
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-
+                    Toast.makeText(getApplicationContext(),Integer.toString((int)ave),Toast.LENGTH_SHORT).show();
                     textView.setText("HR = "+Integer.toString((int)ave)+" bpm");
                     // Stuff that updates the UI
 
