@@ -27,6 +27,7 @@ import android.content.Intent;
 import android.graphics.ImageFormat;
 import android.os.Bundle;
 import android.util.Log;
+import android.util.TimingLogger;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -146,13 +147,22 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         Log.i(TAG, "called onCreate");
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
         setContentView(R.layout.face_detect_surface_view);
 
         Toast.makeText(getApplicationContext(),"Please hold your phone in landscape orientation",Toast.LENGTH_LONG).show();
 
         Button switch_camera = (Button)findViewById(R.id.switch_camera);
+        Button reset = (Button)findViewById(R.id.reset_button);
         textView = (TextView)findViewById(R.id.textView2);
+
+        reset.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                onPause();
+                k=0;
+                onResume();
+            }
+        });
 
         switch_camera.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -256,16 +266,16 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
 
 
         if(facesArray.length==1 && k<200){
-            if(k==0){
-                mFrequency = Core.getTickFrequency();
-                mprevFrameTime = Core.getTickCount();
-            }
-            if((k+1)%20==0){
-                long time = Core.getTickCount();
-                double fps = 20 * mFrequency / (time - mprevFrameTime);
-                mprevFrameTime = time;
-                fpsum = fpsum + fps;
-            }
+//            if(k==0){
+//                mFrequency = Core.getTickFrequency();
+//                mprevFrameTime = Core.getTickCount();
+//            }
+//            if((k+1)%20==0){
+//                long time = Core.getTickCount();
+//                double fps = 20 * mFrequency / (time - mprevFrameTime);
+//                mprevFrameTime = time;
+//                fpsum = fpsum + fps;
+//            }
             FrameArray[k++]=mRgba.submat(facesArray[0]);
 //            double tmp[] = FrameArray[k-1].get(20,20);
 
@@ -279,11 +289,11 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
 //            Log.e(TAG,"Color: "+ tmp[0] +","+ tmp[1] +","+ tmp[2] +"," +tmp[3] +" ");
             Log.e(TAG,"K="+k);
         }
-
         if(k==200) {
-
+            TimingLogger timingLogger = new TimingLogger("Timing","xyz time");
+            timingLogger.reset();
             k++;
-            final double ave = mGetHeartRate.xyz(FrameArray,Math.round(fpsum/10));
+            final double ave = mGetHeartRate.xyz(FrameArray,25.0);
             Log.i("HEART RATE","HR = "+ave);
             runOnUiThread(new Runnable() {
                 @Override
@@ -294,6 +304,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
 
                 }
             });
+            timingLogger.dumpToLog();
 //            mDisplay = new Display(ave);
 //            Intent i= new Intent(FdActivity.this,Display.class);
 //            startActivity(i);
