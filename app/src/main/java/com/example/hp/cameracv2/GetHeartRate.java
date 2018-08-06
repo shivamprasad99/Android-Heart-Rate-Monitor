@@ -1,55 +1,51 @@
 package com.example.hp.cameracv2;
+import android.os.AsyncTask;
 import android.util.Log;
+import android.util.TimingLogger;
 
 import org.apache.commons.math3.complex.Complex;
-import org.apache.commons.math3.exception.DimensionMismatchException;
-import org.apache.commons.math3.exception.NoDataException;
-import org.apache.commons.math3.exception.NotPositiveException;
-import org.apache.commons.math3.exception.NotStrictlyPositiveException;
-import org.apache.commons.math3.exception.NullArgumentException;
-import org.apache.commons.math3.exception.NumberIsTooSmallException;
-import org.apache.commons.math3.exception.OutOfRangeException;
-import org.apache.commons.math3.linear.EigenDecomposition;
-import org.apache.commons.math3.linear.MatrixDimensionMismatchException;
 import org.apache.commons.math3.linear.MatrixUtils;
-import org.apache.commons.math3.linear.NonSquareMatrixException;
+import org.apache.commons.math3.linear.OpenMapRealMatrix;
 import org.apache.commons.math3.linear.RealMatrix;
-import org.apache.commons.math3.linear.RealMatrixChangingVisitor;
-import org.apache.commons.math3.linear.RealMatrixPreservingVisitor;
-import org.apache.commons.math3.linear.RealVector;
-import org.apache.commons.math3.stat.Frequency;
 import org.apache.commons.math3.stat.StatUtils;
 import org.apache.commons.math3.transform.DftNormalization;
 import org.apache.commons.math3.transform.FastFourierTransformer;
 import org.apache.commons.math3.transform.TransformType;
+import org.apache.commons.math3.linear.SparseRealMatrix;
 import org.fastica.FastICAException;
-import org.opencv.core.Core;
 import org.opencv.core.Mat;
-import org.opencv.core.MatOfRect;
-import org.opencv.core.Rect;
-import org.opencv.core.Scalar;
-import org.opencv.core.Size;
-import org.apache.commons.math3.stat.correlation.Covariance;
 import org.apache.commons.math3.linear.Array2DRowRealMatrix;
 import org.fastica.FastICA;
 
 
 import java.util.Arrays;
-import java.util.Collections;
 
 
-public class GetHeartRate {
+public class GetHeartRate extends AsyncTask<String,String,String>{
     private double[]Frequency;
-    private MovingAverage m1,m2,m3;
-
+    RealMatrix icasig,I,O,D2,D3;
+    private int j;
     public double xyz(Mat[] FrameArray,double framerate){
-
+        int T = 200;
+        I = MatrixUtils.createRealIdentityMatrix(T);
+        O = new Array2DRowRealMatrix(T-2,1);
+        for(int i=0;i<O.getRowDimension();i++){
+            for(int j=0;j<O.getColumnDimension();j++){
+                O.setEntry(i,j,1);
+            }
+        }
+        double[] a = new double[]{1,-2,1};
+        O = O.multiply((new Array2DRowRealMatrix(a)).transpose());
+        D2 = spdiags(O,T);
+        D3 = (D2.transpose()).multiply(D2);
+        double[][] d2a=D2.getData();
+        Log.i("filter","rows :"+d2a.length+" cols"+d2a[0].length);
         Log.i("Framerate","average fps is "+framerate);
         double[][] bpmEst=new double[50][2];
         int numofPatchPairs = 50;
         int sHeight=FrameArray[0].height()/40,sWidth=FrameArray[0].width()/40;//small patch size is selected and patch pairs of this size will be produced
         for(int i=0;i<numofPatchPairs;i++){                     //This loop runs once for each patch pair
-
+            TimingLogger timingsLogger = new TimingLogger("Timing2","patch " +i + "timingy");
             int x1=(int)(FrameArray[0].width()*(1/2+Math.random()))/4;
             int y1=(int)(FrameArray[0].height()*(15/7+Math.random()))*7/33;
 
@@ -67,11 +63,17 @@ public class GetHeartRate {
                 mixedSignal[1][j]=getAverageGreen(patch2);
             }
 
-            m1 = new MovingAverage ((int)framerate/5);m2 = new MovingAverage((int)framerate/5);
-            for(int m=0;m<mixedSignal[0].length;m++){
-                mixedSignal[0][m]=m1.next((int)mixedSignal[0][m]);
-                mixedSignal[1][m]=m2.next((int)mixedSignal[1][m]);
-            }
+            timingsLogger.addSplit("Moving ave and ica");
+            MovingAverage m1=new MovingAverage();
+            MovingAverage m2=new MovingAverage();
+            mixedSignal[0]=m1.Calculate(mixedSignal[0],framerate/5);
+            mixedSignal[1]=m2.Calculate(mixedSignal[1],framerate/5);
+
+//            m1 = new MovingAverage ((int)framerate/5);m2 = new MovingAverage((int)framerate/5);
+//            for(int m=0;m<mixedSignal[0].length;m++){
+//                mixedSignal[0][m]=m1.next((int)mixedSignal[0][m]);
+//                mixedSignal[1][m]=m2.next((int)mixedSignal[1][m]);
+//            }
 
             FastICA fi = null;
             try {
@@ -80,38 +82,29 @@ public class GetHeartRate {
                 Log.e("INSIDE GETHEARTRATE","exception in fastICA");
             }
             double[][] vectors = fi.getICVectors();
-            RealMatrix icasig = new Array2DRowRealMatrix(vectors,false);
+            icasig = new Array2DRowRealMatrix(vectors,false);
             Log.i("INSIDE GETHEARTRATE","patch pair created and signal is stored" + i);
 
 
 
             double[] d = new double[2];
             double[][] pxxEst=new double[2][];
-
-            for(int j=0;j<2;j++){
-
-
+            for(j=0;j<2;j++){
                 d[j]=minDsum(mixedSignal,icasig.getRow(j));
-                double lambda = 100/(Math.pow(60/framerate,2));
-                icasig.setRowMatrix(j,(detrendingFilter(icasig.getRowMatrix(j).transpose(),lambda)).transpose());
+                final double lambda = 100/(Math.pow(60/framerate,2));
+                long startTime=System.nanoTime();
+                icasig.setRowMatrix(j, (detrendingFilter(icasig.getRowMatrix(j).transpose(), lambda)).transpose());
+
+                long endTime = System.nanoTime();
+                Log.i("Detrending","patch "+i+" signal "+j+" " + (endTime-startTime));
 //                for(int m=0;m<199;m++){
 //                    Log.i("Heart Rate icasig","icasig "+m+" "+icasig.getRowMatrix(j).getEntry(0,m));
 //                }
-
-                m3 = new MovingAverage((int)framerate/5);
-                for (int m=0;m<icasig.getColumnDimension();m++){
-                    icasig.setEntry(j,m,m3.next((int)icasig.getEntry(j,m)));
-                }
+                icasig.setRowMatrix(j,movingavefliter(icasig.getRowMatrix(j),framerate));
 
 //                icasig.setRowMatrix(j,icasig.getRowMatrix(j).scalarMultiply(0.1));
 
-
                 pxxEst[j]= pwelch(icasig.getRowMatrix(j),framerate);
-//                Log.i("Heart Rate Power","Power length: "+pxxEst[j].length);
-
-
-                pxxEst[j]=Arrays.copyOfRange(pxxEst[j],11, pxxEst[j].length);
-                Frequency=Arrays.copyOfRange(Frequency,11,Frequency.length);
 
                 Log.i("Heart Rate 2","frequency at zero : "+Frequency[0]+"\n");
                 //index of max entry
@@ -124,7 +117,6 @@ public class GetHeartRate {
                         max=pxxEst[j][m];
                     }
                 }
-
                 //Find the peak frequencies in Distribution
                 double[] pks=findpeaks(pxxEst[j]);
                 if(pks.length==0)
@@ -145,7 +137,7 @@ public class GetHeartRate {
                     }
                 }
                 Log.i("heart rate","max_index="+maxindex+" max_1="+max_pk+" max_2="+max_pk2);
-                if(Math.abs(max_pk/max_pk2)>1){
+                if(Math.abs(max_pk/max_pk2)>2){
                     bpmEst[i][j]=Math.round(60*Frequency[maxindex]);
                     Log.i("Heart Rate","BPM"+bpmEst[i][j]);
                 }
@@ -153,6 +145,7 @@ public class GetHeartRate {
                     bpmEst[i][j]=-1;
 
             }//end of 2 signals
+            timingsLogger.dumpToLog();
             int idx;
             if(d[0]<d[1])
                 idx=0;
@@ -180,16 +173,8 @@ public class GetHeartRate {
             if(bpmEst[k][1]!=-1 &&bpmEst[k][1]!=0 )
                 hr[count++]=bpmEst[k][1];
         }
+        Log.i("HRT ","hrt = "+StatUtils.mean(StatUtils.mode(hr)));
         return StatUtils.mean(StatUtils.mode(hr));
-    }
-
-    private RealMatrix movingavefliter(RealMatrix rowMatrix,double framerate) {
-        MovingAverage movingAve;
-        movingAve=new MovingAverage((int)framerate/5);
-        for(int m=0;m<200;m++){
-            rowMatrix.setEntry(0,m,movingAve.next((int)rowMatrix.getEntry(0,m)));
-        }
-        return rowMatrix;
     }
 
 
@@ -206,23 +191,12 @@ public class GetHeartRate {
 
 
     public RealMatrix detrendingFilter(RealMatrix z,double lambda){
-        int T = z.getRowDimension();
-        RealMatrix I = MatrixUtils.createRealIdentityMatrix(T);
-        RealMatrix O = new Array2DRowRealMatrix(T-2,1);
-        for(int i=0;i<O.getRowDimension();i++){
-            for(int j=0;j<O.getColumnDimension();j++){
-                O.setEntry(i,j,1);
-            }
-        }
-        double[] a = new double[]{1,-2,1};
-        O = O.multiply((new Array2DRowRealMatrix(a)).transpose());
-        RealMatrix D2 = spdiags(O,T);
-
-        double[][] d2a=D2.getData();
-//        Log.i("filter",Arrays.deepToString(d2a).replace("], ", "]\n"));
-        Log.i("filter","rows :"+d2a.length+" cols"+d2a[0].length);
-        RealMatrix z_stat = new Array2DRowRealMatrix();
-        z_stat = (I.subtract(MatrixUtils.inverse(I.add((((D2.transpose()).multiply(D2)).scalarMultiply(Math.pow(lambda,2))))))).multiply(z);
+        RealMatrix z_stat;
+        z_stat = (I.subtract(MatrixUtils.inverse(I.add(((D3).scalarMultiply(Math.pow(lambda,2)))))));
+        long startTime = System.nanoTime();
+        z_stat=z_stat.multiply(z);
+        long endTime = System.nanoTime();
+        Log.i("Multiply time","multiply time="+(endTime-startTime));
         return z_stat;
     }
 
@@ -241,7 +215,6 @@ public class GetHeartRate {
         }
         return D2;
     }
-
 
     public double[] findpeaks(double[] pxx){
         int peaks=0,k=0;
@@ -287,11 +260,11 @@ public class GetHeartRate {
         }
 
         RealMatrix Window=new Array2DRowRealMatrix(window);
-        double windowcomp = ((Window).multiply(Window.transpose())).getEntry(0,0);
+        double windowcomp = ((Window.transpose()).multiply(Window).getEntry(0,0));
         Log.i("heart rate power","window compensation "+windowcomp);
 
         double[] x_window=new double[length];
-        for(int k=0;k<length/2;k++){
+        for(int k=0;k<length;k++){
             x_window[k]=x.getEntry(0,k)*window[k];
         }
 
@@ -353,5 +326,17 @@ public class GetHeartRate {
         return Math.min(s1,s2);
     }
 
+    private RealMatrix movingavefliter(RealMatrix rowMatrix,double framerate) {
+        MovingAverage movingAve=new MovingAverage();
 
+        double wlength=framerate/5;
+        rowMatrix = new Array2DRowRealMatrix(movingAve.Calculate(rowMatrix.getRow(0),wlength));
+        return rowMatrix.transpose();
+    }
+
+    @Override
+    protected String doInBackground(String... strings) {
+
+        return null;
+    }
 }

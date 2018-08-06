@@ -23,8 +23,10 @@ import org.opencv.imgproc.Imgproc;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.Intent;
 import android.graphics.ImageFormat;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.TimingLogger;
@@ -75,7 +77,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
 
     private int k = 0;
 
-    private double mFrequency,fpsum;
+    private double mFrequency,fpsum,ave;
 
     private long mprevFrameTime;
 
@@ -266,48 +268,28 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
 
 
         if(facesArray.length==1 && k<200){
-//            if(k==0){
-//                mFrequency = Core.getTickFrequency();
-//                mprevFrameTime = Core.getTickCount();
-//            }
-//            if((k+1)%20==0){
-//                long time = Core.getTickCount();
-//                double fps = 20 * mFrequency / (time - mprevFrameTime);
-//                mprevFrameTime = time;
-//                fpsum = fpsum + fps;
-//            }
             FrameArray[k++]=mRgba.submat(facesArray[0]);
-//            double tmp[] = FrameArray[k-1].get(20,20);
-
-
-//            Scalar s = new Scalar(255.0,0,0,50.0);
-//
-//            Mat repl = new Mat(FrameArray[k-1].rows(),FrameArray[k-1].cols(),CV_8UC4,s);
-//            repl.copyTo(FrameArray[k-1]);
-
-//
-//            Log.e(TAG,"Color: "+ tmp[0] +","+ tmp[1] +","+ tmp[2] +"," +tmp[3] +" ");
             Log.e(TAG,"K="+k);
         }
         if(k==200) {
-            TimingLogger timingLogger = new TimingLogger("Timing","xyz time");
-            timingLogger.reset();
             k++;
+//            mGetHeartRate.getValues(FrameArray,25.0);
+//            Run runner = new Run();
+//            runner.execute();
+            long start=System.currentTimeMillis();
             final double ave = mGetHeartRate.xyz(FrameArray,25.0);
-            Log.i("HEART RATE","HR = "+ave);
+            long end=System.currentTimeMillis();
+            Log.i("Total time","Total time="+(end-start));
+//            Log.i("HEART RATE","HR = "+ave);
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
                     Toast.makeText(getApplicationContext(),Integer.toString((int)ave),Toast.LENGTH_SHORT).show();
                     textView.setText("HR = "+Integer.toString((int)ave)+" bpm");
-                    // Stuff that updates the UI
+//                     Stuff that updates the UI
 
                 }
             });
-            timingLogger.dumpToLog();
-//            mDisplay = new Display(ave);
-//            Intent i= new Intent(FdActivity.this,Display.class);
-//            startActivity(i);
         }
         return mRgba;
     }
@@ -361,4 +343,71 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         }
     }
 
+    public class Run extends AsyncTask<String, String, String> {
+
+        private String resp;
+        ProgressDialog progressDialog;
+
+        @Override
+        protected String doInBackground(String... params) {
+//            publishProgress("Calculating..."); // Calls onProgressUpdate()
+            try {
+//                int time = Integer.parseInt(params[0])*1000;
+
+//                Thread.sleep(time);
+                ave=mGetHeartRate.xyz(FrameArray,25.0);
+                resp=Double.toString(ave);
+                Log.i("hrt",resp);
+
+
+            }
+            catch (Exception e) {
+                e.printStackTrace();
+                resp = e.getMessage();
+            }
+//            publishProgress("Calculating..."+resp);
+            return resp;
+        }
+
+
+        @Override
+        protected void onPostExecute(String result) {
+            // execution of result of Long time consuming operation
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(getApplicationContext(),Integer.toString((int)ave),Toast.LENGTH_SHORT).show();
+                    textView.setText("HR = "+Integer.toString((int)ave)+" bpm");
+//                     Stuff that updates the UI
+
+                    progressDialog.dismiss();
+                }
+            });
+
+//        finalResult.setText(result);
+        }
+
+
+        @Override
+        protected void onPreExecute() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    progressDialog.show(FdActivity.this,
+                            "ProgressDialog","iygib");
+//                    textView.setText("HR = "+(ave)+" bpm");
+                    // Stuff that updates the UI
+
+                }
+            });
+
+//                "Wait for "+time.getText().toString()+ " seconds");
+        }
+
+
+        @Override
+        protected void onProgressUpdate(String... text) {
+//        finalResult.setText(text[0]);
+        }
+    }
 }

@@ -33,4 +33,5 @@ dependencies {
     implementation project(':openCVLibrary341')
     implementation files('libs/commons-math3-3.6.1.jar')
     implementation files('libs/fastica-1.11.jar')
+    implementation 'commons-io:commons-io:2.5'
 }

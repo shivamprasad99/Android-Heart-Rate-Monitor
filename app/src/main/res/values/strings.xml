@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">CameraCV2</string>
+    <string name="app_name">Heart Rate</string>
     <string name="textview">TextView</string>
     <string name="switch_camera">switch camera</string>
     <string name="reset">reset</string>
