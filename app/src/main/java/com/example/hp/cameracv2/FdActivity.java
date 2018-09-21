@@ -10,6 +10,7 @@ import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Core;
+import org.opencv.core.CvException;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfRect;
 import org.opencv.core.Rect;
@@ -268,8 +269,10 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
 
 
         if(facesArray.length==1 && k<200){
-            FrameArray[k++]=mRgba.submat(facesArray[0]);
-            Log.e(TAG,"K="+k);
+            if(0 <= facesArray[0].x && 0 <= facesArray[0].width && facesArray[0].x + facesArray[0].width <= mRgba.cols() && 0 <= facesArray[0].y && 0 <= facesArray[0].height && facesArray[0].y + facesArray[0].height <= mRgba.rows()) {
+                FrameArray[k++] = mRgba.submat(facesArray[0]);
+                Log.e(TAG, "K=" + k);
+            }
         }
         if(k==200) {
             k++;

@@ -23,9 +23,10 @@ import java.util.Arrays;
 
 public class GetHeartRate extends AsyncTask<String,String,String>{
     private double[]Frequency;
-    RealMatrix icasig,I,O,D2,D3;
+    private RealMatrix icasig,I,O,D2,D3;
     private int j;
     public double xyz(Mat[] FrameArray,double framerate){
+        long startD2 = System.nanoTime();
         int T = 200;
         I = MatrixUtils.createRealIdentityMatrix(T);
         O = new Array2DRowRealMatrix(T-2,1);
@@ -39,13 +40,16 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
         D2 = spdiags(O,T);
         D3 = (D2.transpose()).multiply(D2);
         double[][] d2a=D2.getData();
+        long endD2 = System.nanoTime();
+        Log.i("D2 timetag","D2 time="+(endD2-startD2));
+
         Log.i("filter","rows :"+d2a.length+" cols"+d2a[0].length);
         Log.i("Framerate","average fps is "+framerate);
-        double[][] bpmEst=new double[50][2];
-        int numofPatchPairs = 50;
+        double[][] bpmEst=new double[300][2];
+        int numofPatchPairs = 300;
         int sHeight=FrameArray[0].height()/40,sWidth=FrameArray[0].width()/40;//small patch size is selected and patch pairs of this size will be produced
         for(int i=0;i<numofPatchPairs;i++){                     //This loop runs once for each patch pair
-            TimingLogger timingsLogger = new TimingLogger("Timing2","patch " +i + "timingy");
+            long patchStart = System.nanoTime();
             int x1=(int)(FrameArray[0].width()*(1/2+Math.random()))/4;
             int y1=(int)(FrameArray[0].height()*(15/7+Math.random()))*7/33;
 
@@ -54,26 +58,21 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
 
             double[][] mixedSignal = new double [2][FrameArray.length]; //a 2d array to store the values of the patch pair green values over the frames
 
+            long startGreen = System.nanoTime();
             for(int j=0;j<FrameArray.length;j++) {
-                //for each patch pair all frames are processed
-                //now generate small patches and send to get the average green value over the patch for reach frame
                 Mat patch1 = FrameArray[j].submat(y1,y1+sHeight,x1,x1+sWidth);
                 Mat patch2 = FrameArray[j].submat(y2,y2+sHeight,x2,x2+sWidth);
                 mixedSignal[0][j]=getAverageGreen(patch1);
                 mixedSignal[1][j]=getAverageGreen(patch2);
             }
+            long endGreen = System.nanoTime();
+            Log.i("GetAverageGreen timetag","Average green "+i+  " time= "+(endGreen-startGreen));
 
-            timingsLogger.addSplit("Moving ave and ica");
+            long startIca = System.nanoTime();
             MovingAverage m1=new MovingAverage();
             MovingAverage m2=new MovingAverage();
             mixedSignal[0]=m1.Calculate(mixedSignal[0],framerate/5);
             mixedSignal[1]=m2.Calculate(mixedSignal[1],framerate/5);
-
-//            m1 = new MovingAverage ((int)framerate/5);m2 = new MovingAverage((int)framerate/5);
-//            for(int m=0;m<mixedSignal[0].length;m++){
-//                mixedSignal[0][m]=m1.next((int)mixedSignal[0][m]);
-//                mixedSignal[1][m]=m2.next((int)mixedSignal[1][m]);
-//            }
 
             FastICA fi = null;
             try {
@@ -83,6 +82,8 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
             }
             double[][] vectors = fi.getICVectors();
             icasig = new Array2DRowRealMatrix(vectors,false);
+            long endIca = System.nanoTime();
+            Log.i("ICA timetag","ICA "+i+" time= "+(endIca-startIca));
             Log.i("INSIDE GETHEARTRATE","patch pair created and signal is stored" + i);
 
 
@@ -92,18 +93,15 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
             for(j=0;j<2;j++){
                 d[j]=minDsum(mixedSignal,icasig.getRow(j));
                 final double lambda = 100/(Math.pow(60/framerate,2));
-                long startTime=System.nanoTime();
-                icasig.setRowMatrix(j, (detrendingFilter(icasig.getRowMatrix(j).transpose(), lambda)).transpose());
 
-                long endTime = System.nanoTime();
-                Log.i("Detrending","patch "+i+" signal "+j+" " + (endTime-startTime));
-//                for(int m=0;m<199;m++){
-//                    Log.i("Heart Rate icasig","icasig "+m+" "+icasig.getRowMatrix(j).getEntry(0,m));
-//                }
+                long startDetrending=System.nanoTime();
+                icasig.setRowMatrix(j, (detrendingFilter(icasig.getRowMatrix(j).transpose(), lambda)).transpose());
+                long endDetrending = System.nanoTime();
+                Log.i("Detrending timetag","patch "+i+" signal "+j+" " + (endDetrending-startDetrending));
+
                 icasig.setRowMatrix(j,movingavefliter(icasig.getRowMatrix(j),framerate));
 
-//                icasig.setRowMatrix(j,icasig.getRowMatrix(j).scalarMultiply(0.1));
-
+                long startWelch = System.nanoTime();
                 pxxEst[j]= pwelch(icasig.getRowMatrix(j),framerate);
 
                 Log.i("Heart Rate 2","frequency at zero : "+Frequency[0]+"\n");
@@ -143,20 +141,21 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
                 }
                 else
                     bpmEst[i][j]=-1;
+                long endWelch = System.nanoTime();
+                Log.i("Welch findpeaks timetag","Welch "+i+  "time="+(endWelch-startWelch));
 
             }//end of 2 signals
-            timingsLogger.dumpToLog();
             int idx;
             if(d[0]<d[1])
                 idx=0;
             else
                 idx=1;
             bpmEst[i][idx]=-1;
-//            RealMatrix mixSig =new Array2DRowRealMatrix(mixedSignal);
-//            now we have stored the values ofget the green averages of the two selected patches and we need to run fastica to get the signal
+            long patchEnd = System.nanoTime();
+            Log.i("Patch timetag","patch " +i+" time="+(patchEnd-patchStart));
         }//end of patches
         int count=0;
-        for(int k=0;k<50;k++){
+        for(int k=0;k<300;k++){
             if((bpmEst[k][0]==-1 && bpmEst[k][1]==-1 )|| (bpmEst[k][1]==0&&bpmEst[k][0]==0))
                 continue;
             if((bpmEst[k][0]!=-1 && bpmEst[k][0]!=0) || (bpmEst[k][1]!=-1 &&bpmEst[k][1]!=0) )
@@ -165,7 +164,7 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
 
         double[] hr=new double[count];
         count=0;
-        for(int k=0;k<50;k++){
+        for(int k=0;k<300;k++){
             if((bpmEst[k][0]==-1 && bpmEst[k][1]==-1 )|| (bpmEst[k][1]==0&&bpmEst[k][0]==0))
                 continue;
             if(bpmEst[k][0]!=-1 && bpmEst[k][0]!=0)
@@ -173,12 +172,12 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
             if(bpmEst[k][1]!=-1 &&bpmEst[k][1]!=0 )
                 hr[count++]=bpmEst[k][1];
         }
-        Log.i("HRT ","hrt = "+StatUtils.mean(StatUtils.mode(hr)));
-        return StatUtils.mean(StatUtils.mode(hr));
+        Log.i("HRT ","hrt = "+StatUtils.mean(hr));
+        return StatUtils.mean(hr);
     }
 
 
-    public double getAverageGreen(Mat patch){
+    private double getAverageGreen(Mat patch){
         double average=0;
         for(int i=0;i<patch.width();i++) {
             for (int j = 0; j < patch.height(); j++) {
@@ -190,7 +189,7 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
 
 
 
-    public RealMatrix detrendingFilter(RealMatrix z,double lambda){
+    private RealMatrix detrendingFilter(RealMatrix z,double lambda){
         RealMatrix z_stat;
         z_stat = (I.subtract(MatrixUtils.inverse(I.add(((D3).scalarMultiply(Math.pow(lambda,2)))))));
         long startTime = System.nanoTime();
@@ -201,7 +200,7 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
     }
 
 
-    public RealMatrix spdiags(RealMatrix O,int T){
+    private RealMatrix spdiags(RealMatrix O,int T){
         RealMatrix D2 = new Array2DRowRealMatrix(T-2,T);
         for(int i=0;i<T-2;i++){
             for(int j=0;j<T;j++){
@@ -216,7 +215,7 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
         return D2;
     }
 
-    public double[] findpeaks(double[] pxx){
+    private double[] findpeaks(double[] pxx){
         int peaks=0,k=0;
         for(int i=1;i<pxx.length-1;i++){
             if(pxx[i]>pxx[i-1] && pxx[i]>=pxx[i+1])
@@ -231,15 +230,13 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
     }
 
 
-    public double[] pwelch(RealMatrix x,double framerate){
+    private double[] pwelch(RealMatrix x,double framerate){
 
         HammingWindow hammingWindow;            //intialise hamming window
         hammingWindow=new HammingWindow();
 
         int length = x.getColumnDimension();            //length of the signal
 
-//        int overlapLength = Math.round(length/2);
-        // fft length
         double fftLength= Math.pow(2,Math.ceil(Math.log(length)/Math.log(2)));
 
         //step of each frequency
@@ -251,8 +248,6 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
             Frequency[m]=k*framerate/2;
             m++;
         }
-
-        //getting the hamming window
         double[] window=new double[length];
         for(int k=0;k<length;k++){
             window[k]=(double)hammingWindow.value(length,k);
@@ -282,15 +277,11 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
             }
         }
         Power=Arrays.copyOfRange(Power,0, Segment.length/2);
-
-
-
-//        RealMatrix Matrix=new Array2DRowRealMatrix(Power);
         return Power;
 
     }
 
-    static public Complex[] fft(double[] sig) {
+    static private Complex[] fft(double[] sig) {
         int N = sig.length;
         int M = (int) (Math.log(N) / Math.log(2.0));
         int NpowerTwo = (int) Math.pow(2, M);
@@ -311,7 +302,7 @@ public class GetHeartRate extends AsyncTask<String,String,String>{
         return result;
     }
 
-    public double minDsum (double[][] mixedSig,double[] ica){
+    private double minDsum (double[][] mixedSig,double[] ica){
         double[][] ica2 = new double[2][ica.length];
         for(int i=0;i<ica.length;i++){
             ica2[0][i]=ica[i];ica2[1][i]=ica[i];
