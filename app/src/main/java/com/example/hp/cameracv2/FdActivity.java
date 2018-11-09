@@ -21,14 +21,18 @@ import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
 import org.opencv.objdetect.CascadeClassifier;
 import org.opencv.imgproc.Imgproc;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.util.TimingLogger;
 import android.view.Menu;
@@ -127,6 +131,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
 
                     mOpenCvCameraView.enableView();
                     mOpenCvCameraView.enableFpsMeter();
+
                 } break;
                 default:
                 {
@@ -136,6 +141,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         }
     };
 
+
     public FdActivity() {
         mDetectorName = new String[2];
         mDetectorName[JAVA_DETECTOR] = "Java";
@@ -143,6 +149,7 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
         FrameArray = new Mat[200];
         Log.i(TAG, "Instantiated new " + this.getClass());
     }
+
 
     /** Called when the activity is first created. */
     @Override
@@ -184,6 +191,10 @@ public class FdActivity extends Activity implements CvCameraViewListener2 {
                 }
             }
         });
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_DENIED)
+            ActivityCompat.requestPermissions(this, new String[] {Manifest.permission.CAMERA}, 1);
 
         mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.fd_activity_surface_view);
         mOpenCvCameraView.setVisibility(CameraBridgeViewBase.VISIBLE);
